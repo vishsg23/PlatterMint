@@ -105,28 +105,4 @@ python graph.py
 | `main.py` | FastAPI backend (`POST /recommend`) |
 | `streamlit_app.py` | Frontend — form, results, and the human-in-the-loop prompt |
 
-## Known limitations
 
-- **Diet detection is a name-text heuristic.** Google Places has no
-  structured veg/non-veg field, so this relies on restaurants mentioning
-  "veg"/"vegan"/"vegetarian" in their own name. It can't catch a
-  vegetarian-only place that doesn't advertise it in the name.
-- **No authentication.** `user_id` is a plain name with no login — fine for
-  a personal/demo project, not for anything with real user accounts.
-- **Distance is often an estimate**, not a measurement — Google's basic
-  Text Search doesn't return coordinates, so this is clearly labeled as an
-  estimate in the score breakdown rather than presented as precise.
-
-## Going further (good interview talking points)
-
-- Swap the keyword-based cuisine/craving/diet extraction in
-  `orchestrator.py` for an LLM call for more natural parsing.
-- Use the Places Details API's menu text for real diet detection instead
-  of a name-text heuristic.
-- Switch to Nearby Search with lat/lng so distance is a real measurement,
-  not an estimate.
-- Replace the structured-history RAG with a real vector store (e.g.
-  pgvector) if you want to retrieve on free-text past reviews, not just
-  structured fields.
-- Add real authentication if this ever needs to support actual user
-  accounts rather than plain names.
