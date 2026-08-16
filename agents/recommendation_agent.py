@@ -1,28 +1,3 @@
-"""
-recommendation_agent.py
-------------------------
-This is the agent that turns a filtered list into an actual DECISION:
-- Every restaurant gets a transparent 0-100 AI Match Score (scoring.py)
-- The winner gets a full reasons list + confidence %
-- We show what a FEW rejected restaurants lost points on (transparency)
-- If the user's saved history changed the outcome, we show the before/after
-- Every restaurant gets free Google Maps links (no API key/cost involved --
-  see utils.py for why these two specifically are free)
-
-If an OpenAI key is set, we ask the LLM to reword the reasons more warmly.
-Otherwise everything is built with plain rule-based logic -- so the whole
-app still works and still explains itself with zero API keys.
-
-FIX (2026-08): confidence used to just be `top_score + up to 5` -- a
-different-looking copy of the same number, not an independent signal. It's
-now based on:
-  - how far ahead the winner is of the runner-up (a clear win vs. a near-tie)
-  - how many candidates were actually compared
-  - whether a constraint had to be relaxed to get a match
-so a restaurant can have a solid match_score but LOW confidence if it only
-barely beat the next option, and vice versa.
-"""
-
 import os
 from .state import AgentState
 from .scoring import score_restaurant, PRICE_LEVEL_BY_BUDGET
@@ -82,19 +57,6 @@ def _enrich_restaurant(restaurant, breakdown, total_score, location, notes=None)
 
 
 def _tie_break_key(scored_entry):
-    """
-    FIX: exact score ties used to fall back on whatever order Google's API
-    happened to return results in -- not a real decision. Ties aren't rare
-    here since the score is built from coarse rounded buckets (30/25/20/
-    15/5/5), so this matters in practice, not just in theory.
-
-    When two restaurants land on the exact same total score, break the tie
-    using, in order:
-      1. Higher star rating wins
-      2. Cheaper price wins (a reasonable default when everything else is equal)
-      3. Alphabetical by name -- not "better", just keeps results consistent
-         between runs instead of shuffling with the API's response order.
-    """
     restaurant, breakdown, total = scored_entry
     rating = restaurant.get("rating") or 0
     price_level = restaurant.get("price_level")
@@ -104,11 +66,6 @@ def _tie_break_key(scored_entry):
 
 
 def _baseline_top_pick(search_results):
-    """
-    What the top pick WOULD have been using generic defaults (medium budget,
-    3.5+ rating) instead of the user's saved history. Used to prove the RAG
-    agent actually changed something, not just decorate the UI.
-    """
     allowed = PRICE_LEVEL_BY_BUDGET.get("medium", [0, 1, 2, 3, 4])
     baseline_matches = [
         r for r in search_results
@@ -120,13 +77,6 @@ def _baseline_top_pick(search_results):
 
 
 def _build_confidence(scored, top_breakdown, relaxed_constraint):
-    """
-    Confidence reflects how SURE we are the winner is genuinely the best
-    choice available -- not a rescaled copy of its match score. Driven by:
-      - the score gap to the runner-up (bigger gap = more sure)
-      - how many candidates we actually had to choose from
-      - whether we had to relax something the person asked for
-    """
     top_score = scored[0][2]
     runner_up_score = scored[1][2] if len(scored) > 1 else None
 
@@ -155,13 +105,7 @@ def _build_confidence(scored, top_breakdown, relaxed_constraint):
 
     confidence = min(95, max(35, confidence))
 
-    # FIX (#10, redundant messaging): this used to also repeat "Budget
-    # satisfied" and "Matches your past preferences" here -- but those are
-    # already shown in the "Why we picked it" list built by _build_reasons()
-    # from the same breakdown. Saying the same fact twice in two different
-    # boxes doesn't add information, so confidence_reasons now only covers
-    # things the "Why we picked it" list does NOT already say: how close the
-    # race was, how many options existed, and whether we had to compromise.
+
     reasons = []
     if runner_up_score is not None:
         gap = top_score - runner_up_score
@@ -184,8 +128,6 @@ def _rule_based_recommendation(state: AgentState):
     relaxed = state.get("relaxed_constraint")
     location = state.get("location", "")
     used_history = bool(state.get("welcome_message"))
-    # FIX (#10): tells scoring.py whether this user has ANY history at all,
-    # separate from whether it happened to match. See preference_rag.py.
     history_available = state.get("has_preference_history", False)
 
     if not filtered:
@@ -226,12 +168,7 @@ def _rule_based_recommendation(state: AgentState):
             alt["reason"] = "Solid backup option"
         alternatives.append(alt)
 
-    # FIX (#10, "only top-3 shown"): previously anything past the winner + 2
-    # alternatives was thrown away, even though up to 10 candidates were
-    # compared. We now keep ranks 4-8 as a lightweight "more options" list
-    # (just name, score, rating, price, and a maps link -- not a full card)
-    # so the frontend can show them in a simple "see more" list without
-    # cluttering the main view.
+
     more_options = []
     for r, breakdown, total in scored[3:8]:
         more_options.append({
@@ -261,8 +198,17 @@ def _rule_based_recommendation(state: AgentState):
 
     # one-line plain-English summary
     intro_bits = []
-    intro_bits.append(f"looked for {cuisine} restaurants near you" if cuisine
-                       else "couldn't detect a specific cuisine, so I looked for highly-rated options nearby")
+    food_craving = state.get("food_craving")
+    if cuisine:
+        intro_bits.append(f"looked for {cuisine} restaurants near you")
+    elif food_craving:
+        intro_bits.append(f"looked for {food_craving} near you")
+    else:
+        intro_bits.append("couldn't detect a specific cuisine, so I looked for highly-rated options nearby")
+    if state.get("search_broadened"):
+        # NEW: transparency for when the specific search term found nothing
+        # and we had to fall back to a broader real search instead.
+        intro_bits.append("had to broaden the search since that specific craving didn't turn up results nearby")
     if relaxed:
         intro_bits.append(f"had to relax the {relaxed} requirement to find good matches")
     intro_line = "I " + ", and ".join(intro_bits) + "."
@@ -331,9 +277,7 @@ def recommend_node(state: AgentState) -> AgentState:
         f"selected top {picked_count}, winner confidence {top_pick['confidence'] if top_pick else 0}%"
     )
 
-    # Save this interaction so future vague queries from this user are
-    # personalized -- but only if we actually found something. Saving
-    # None/None on a failed search just pollutes future preference lookups.
+    
     if top_pick:
         save_preference(
             user_id=state.get("user_id", "guest"),

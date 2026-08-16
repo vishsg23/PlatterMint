@@ -1,15 +1,3 @@
-"""
-utils.py
---------
-Small shared helpers used across agents/UI.
-
-IMPORTANT: the two Maps links below cost NOTHING and need NO Google API key.
-They just build a normal google.com/maps URL and open it in the browser --
-this is the same as clicking a link, not an API call, so there's no usage
-or billing involved. That's why only these two ship in PlatterMint, and not
-Call / Website / Photos, which do require paid Places Details API calls.
-"""
-
 from urllib.parse import quote
 
 PRICE_RANGES = {

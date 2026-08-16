@@ -1,13 +1,3 @@
-"""
-state.py
---------
-LangGraph passes ONE shared dictionary (called "state") between every agent.
-Each agent reads what it needs from this dictionary and writes its result
-back into it. Think of it as a shared clipboard that gets passed around.
-Using a TypedDict just gives us autocomplete + a clear list of every field
-that exists, so it's easier to follow than a plain dict.
-"""
-
 from typing import TypedDict, List, Dict, Optional
 
 
@@ -22,6 +12,7 @@ class AgentState(TypedDict, total=False):
     # ---- filled in by the Orchestrator ----
     cuisine: Optional[str]
     food_craving: Optional[str]         # fallback search term when no strict cuisine was detected
+    diet: Optional[str]                 # NEW: "veg" / "non-veg" / None, detected from the query
     original_min_rating: Optional[float]  # what the user actually asked for (now used in the trade-off table)
     budget: Optional[str]               # "low" / "medium" / "high"
     min_rating: Optional[float]
@@ -34,6 +25,7 @@ class AgentState(TypedDict, total=False):
 
     # ---- filled in by the Search agent ----
     search_results: List[Dict]
+    search_broadened: bool              # NEW: True if the specific search term found nothing and we broadened it
 
     # ---- filled in by the Filter & Tradeoff agent ----
     filtered_results: List[Dict]

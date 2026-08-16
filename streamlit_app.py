@@ -1,42 +1,10 @@
-"""
-streamlit_app.py
------------------
-PlatterMint frontend. Shows the AI's actual decision-making, not just a
-list of names:
-  - AI Match Score with a full breakdown (why THIS restaurant won)
-  - A few restaurants the AI rejected, and why
-  - What changed because of your saved history (before/after comparison)
-  - Trade-off transparency when constraints had to be relaxed
-  - Free "Open in Google Maps" / "Directions" buttons (just links -- no
-    API key or cost involved, see utils.py)
-  - A visible agent-by-agent trace
-
-No restaurant photos are used (avoids extra paid Places Details API calls).
-
-Run with (backend must be running first):
-    streamlit run streamlit_app.py
-
-FIXES in this version (#10):
-  - Checkbox now matches the purple theme instead of showing a default red box.
-  - Tagline text is now readable (was faint white-on-light-gray).
-  - HITL checkbox icon changed from 🤵 (unrelated) to 🔔 (clearer meaning).
-  - Score-breakdown bars now show a note when a number is an estimate or
-    "not applicable" (e.g. distance, cuisine, preference history), instead
-    of silently rendering it as if it were precisely measured.
-  - Added an optional PIN field (see database.py) so a name can be protected.
-  - Added a simple "see more restaurants" list using the new /recommend
-    field `more_options`, so ranks 4-8 aren't thrown away.
-"""
-
 import base64
 import streamlit as st
 import requests
 
 API_URL = "http://127.0.0.1:8000/recommend"
 
-# ---------------------------------------------------------------------------
-# Glassmorphism theme -- one CSS block controls the whole look
-# ---------------------------------------------------------------------------
+
 def apply_theme(image_path):
     with open(image_path, "rb") as f:
         encoded = base64.b64encode(f.read()).decode()
@@ -159,34 +127,16 @@ st.markdown(
 with st.form("query_form"):
     user_id = st.text_input("Your name / user ID", value="guest")
 
-    # FIX (#8): optional PIN. Leaving it blank keeps the old behavior (name
-    # is open to anyone). Setting one the first time protects that name.
-    # autocomplete="new-password" tells the browser this is a sensitive
-    # field it shouldn't remember/suggest like a normal text box.
-    pin = st.text_input(
-        "PIN (optional — protects your saved name)",
-        value="",
-        type="password",
-        autocomplete="new-password",
-        help="Leave blank if you don't care about this. If you DO set a PIN the first "
-             "time you use a name, you'll need to enter the same PIN next time to use "
-             "that name again.",
-    )
-
-    # autocomplete="off" stops the browser from popping up a dropdown of
-    # every location you've typed before -- it was rendering ABOVE this
-    # field (overlapping the PIN row above it) whenever there wasn't
-    # enough space below to show it normally.
+    
     location = st.text_input("Your location", value="Nashik", autocomplete="off")
     user_query = st.text_input(
         "What are you craving?",
         placeholder="e.g. cheap pizza near me / best south indian food / something sweet"
     )
 
-    # FIX: icon changed from 🤵 (no clear connection to the feature) to 🔔,
-    # which better signals "I'll alert/ask you before doing this."
+    
     ask_if_unsure = st.checkbox(
-        "🔔 Ask me before relaxing filters (human-in-the-loop)",
+        "Ask me before relaxing filters (human-in-the-loop)",
         value=True,
         help="If nothing matches perfectly, PlatterMint will pause and let you choose "
              "how to adjust --- instead of the AI silently deciding for you.",
@@ -198,10 +148,6 @@ with st.form("query_form"):
 # Small display helpers
 # ---------------------------------------------------------------------------
 def render_score_breakdown(breakdown):
-    """Shows the point-by-point score, e.g. 'Cuisine Match: 30/30'.
-    FIX: now also shows a small note under any bar that's an estimate or
-    marked not-applicable, instead of presenting every number as if it
-    were measured with the same precision."""
     for item in breakdown:
         st.progress(
             item["earned"] / item["possible"] if item["possible"] else 0,
@@ -242,8 +188,6 @@ def render_restaurant_card(restaurant, is_top=False):
 
 
 def render_more_options(more_options):
-    """FIX (#10, 'only top-3 shown'): a lightweight list for ranks 4-8, so
-    they're visible without cluttering the main view with full cards."""
     for r in more_options:
         st.markdown(
             f"- **{r['name']}** · {r['match_score']}/100 · ⭐ {r.get('rating')} · "
@@ -260,15 +204,10 @@ def fetch_recommendation(relaxation_choice=None):
         "location": q["location"],
         "ask_if_unsure": q["ask_if_unsure"],
         "relaxation_choice": relaxation_choice,
-        "pin": q.get("pin") or None,
     })
     return response.json()
 
 
-# ---------------------------------------------------------------------------
-# Main flow -- driven by st.session_state so it can PAUSE (waiting for the
-# person to pick a relaxation option) and RESUME with that choice.
-# ---------------------------------------------------------------------------
 if submitted:
     if not user_query.strip():
         st.warning("Please type what you're looking for.")
@@ -276,7 +215,6 @@ if submitted:
         st.session_state["last_query"] = {
             "user_id": user_id, "user_query": user_query,
             "location": location, "ask_if_unsure": ask_if_unsure,
-            "pin": pin,
         }
         st.session_state["api_response"] = None  # force a fresh fetch below
 
@@ -288,12 +226,8 @@ if "last_query" in st.session_state:
 
         data = st.session_state["api_response"]
 
-        # ---- FIX (#8): PIN was wrong / name is protected ----
-        if data.get("auth_error"):
-            st.error(f"🔒 {data['auth_error']}")
-
         # ---- PAUSED: the Filter agent wants a human decision ----
-        elif data.get("needs_human_input"):
+        if data.get("needs_human_input"):
             st.warning("🙋 I couldn't find a perfect match for every filter. What would you like me to do?")
             for option in data["relaxation_options"]:
                 if st.button(
